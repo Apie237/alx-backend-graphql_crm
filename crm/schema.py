@@ -1,3 +1,5 @@
+
+
 import graphene
 from graphene_django import DjangoObjectType
 from django.utils import timezone
@@ -9,7 +11,7 @@ class CustomerType(DjangoObjectType):
         model = Customer
         fields = "__all__"
 
-class OrderType(DjangoObjectType):
+class OrderType(DjangoObjectType):it 
     class Meta:
         model = Order
         fields = "__all__"

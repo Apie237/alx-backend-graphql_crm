@@ -1,10 +1,8 @@
-# File: crm/schema.py
-
 import graphene
 from graphene_django import DjangoObjectType
 from django.utils import timezone
 from datetime import timedelta
-from .models import Customer, Order, Product
+from crm.models import Customer, Order, Product
 
 class CustomerType(DjangoObjectType):
     class Meta:

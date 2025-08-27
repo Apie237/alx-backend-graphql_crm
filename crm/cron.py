@@ -1,8 +1,8 @@
-# File: crm/cron.py
-
 from datetime import datetime
 import requests
 import json
+from gql.transport.requests import RequestsHTTPTransport
+from gql import gql, Client
 
 def log_crm_heartbeat():
     """
@@ -14,33 +14,31 @@ def log_crm_heartbeat():
     # Basic heartbeat message
     heartbeat_msg = f"{timestamp} CRM is alive"
     
-    # Optional: Test GraphQL endpoint responsiveness
+    # Optionally, queries the GraphQL hello field to verify the endpoint is responsive
     try:
-        # Simple GraphQL hello query
-        graphql_query = {
-            "query": "{ hello }"
-        }
-        
-        response = requests.post(
-            "http://localhost:8000/graphql",
-            json=graphql_query,
-            timeout=5,
-            headers={'Content-Type': 'application/json'}
+        # Setup GraphQL client
+        transport = RequestsHTTPTransport(
+            url="http://localhost:8000/graphql",
+            use_json=True,
         )
+        client = Client(transport=transport, fetch_schema_from_transport=True)
         
-        if response.status_code == 200:
-            result = response.json()
-            if 'data' in result and 'hello' in result['data']:
-                heartbeat_msg += " - GraphQL endpoint responsive"
-            else:
-                heartbeat_msg += " - GraphQL endpoint returned unexpected response"
+        # Simple GraphQL hello query
+        query = gql("""
+        {
+            hello
+        }
+        """)
+        
+        result = client.execute(query)
+        
+        if 'hello' in result:
+            heartbeat_msg += " - GraphQL endpoint responsive"
         else:
-            heartbeat_msg += f" - GraphQL endpoint error (HTTP {response.status_code})"
+            heartbeat_msg += " - GraphQL endpoint returned unexpected response"
             
-    except requests.RequestException as e:
-        heartbeat_msg += f" - GraphQL endpoint unavailable ({str(e)})"
     except Exception as e:
-        heartbeat_msg += f" - Heartbeat check error ({str(e)})"
+        heartbeat_msg += f" - GraphQL endpoint unavailable ({str(e)})"
     
     # Append to log file
     with open(log_file, 'a') as f:
@@ -58,62 +56,54 @@ def update_low_stock():
     log_file = "/tmp/low_stock_updates_log.txt"
     
     try:
+        # Setup GraphQL client
+        transport = RequestsHTTPTransport(
+            url="http://localhost:8000/graphql",
+            use_json=True,
+        )
+        client = Client(transport=transport, fetch_schema_from_transport=True)
+        
         # GraphQL mutation for updating low stock products
-        mutation = {
-            "query": """
-            mutation UpdateLowStockProducts {
-                updateLowStockProducts {
-                    result {
-                        success
-                        message
-                        updatedProducts {
-                            id
-                            name
-                            stock
-                        }
+        mutation = gql("""
+        mutation UpdateLowStockProducts {
+            updateLowStockProducts {
+                result {
+                    success
+                    message
+                    updatedProducts {
+                        id
+                        name
+                        stock
                     }
                 }
             }
-            """
         }
+        """)
         
-        response = requests.post(
-            "http://localhost:8000/graphql",
-            json=mutation,
-            timeout=30,
-            headers={'Content-Type': 'application/json'}
-        )
+        result = client.execute(mutation)
         
-        if response.status_code == 200:
-            result = response.json()
+        if 'updateLowStockProducts' in result:
+            mutation_result = result['updateLowStockProducts']['result']
+            updated_products = mutation_result.get('updatedProducts', [])
             
-            if 'data' in result and 'updateLowStockProducts' in result['data']:
-                mutation_result = result['data']['updateLowStockProducts']['result']
-                updated_products = mutation_result.get('updatedProducts', [])
+            with open(log_file, 'a') as f:
+                f.write(f"\n[{timestamp}] Low stock update process:\n")
+                f.write(f"Success: {mutation_result.get('success', False)}\n")
+                f.write(f"Message: {mutation_result.get('message', 'No message')}\n")
                 
-                with open(log_file, 'a') as f:
-                    f.write(f"\n[{timestamp}] Low stock update process:\n")
-                    f.write(f"Success: {mutation_result.get('success', False)}\n")
-                    f.write(f"Message: {mutation_result.get('message', 'No message')}\n")
-                    
-                    if updated_products:
-                        f.write(f"Updated {len(updated_products)} products:\n")
-                        for product in updated_products:
-                            f.write(f"  - {product['name']}: new stock level {product['stock']}\n")
-                    else:
-                        f.write("No products needed updating\n")
-                
-                print(f"Low stock update completed - {len(updated_products)} products updated")
-            else:
-                error_msg = f"[{timestamp}] GraphQL mutation failed - unexpected response format\n"
-                with open(log_file, 'a') as f:
-                    f.write(error_msg)
-                print("Low stock update failed - unexpected response")
+                if updated_products:
+                    f.write(f"Updated {len(updated_products)} products:\n")
+                    for product in updated_products:
+                        f.write(f"  - {product['name']}: new stock level {product['stock']}\n")
+                else:
+                    f.write("No products needed updating\n")
+            
+            print(f"Low stock update completed - {len(updated_products)} products updated")
         else:
-            error_msg = f"[{timestamp}] HTTP error {response.status_code} during low stock update\n"
+            error_msg = f"[{timestamp}] GraphQL mutation failed - unexpected response format\n"
             with open(log_file, 'a') as f:
                 f.write(error_msg)
-            print(f"Low stock update failed - HTTP {response.status_code}")
+            print("Low stock update failed - unexpected response")
             
     except Exception as e:
         error_msg = f"[{timestamp}] Exception during low stock update: {str(e)}\n"

@@ -1,15 +1,13 @@
-# File: crm/settings.py
 
-# Standard Django settings would be here...
-# Below are the additions specific to this project
 
-# Add django_crontab to INSTALLED_APPS
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    'django_celery_beat',       # <-- Required for Celery Beat
+    'django_celery_results',
     'django.contrib.staticfiles',
     'graphene_django',
     'django_crontab',  # Add this line
